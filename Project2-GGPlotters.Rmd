@@ -13,7 +13,90 @@ knitr::opts_chunk$set(echo = TRUE)
 library(rpart)
 library(C50)
 library(gmodels)
+library(tidyverse)
+library(cvTools)
+library(caret)
 
 test <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_test_set.csv")
 train <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_train_set.csv")
+```
+
+```{r}
+summary(train)
+filtered_train <- train %>% filter(YEAR.BUILT!=0)
+```
+
+```{r}
+train_selected <- select(train, 3, 4, 5, 6, 9, 16, 18, 19, 20, 21, 22)
+train_selected <- filter(train_selected, train_selected$YEAR.BUILT!=0)
+```
+
+
+```{r}
+## Create k folds 
+k=6
+folds <- cvFolds(nrow(train_selected), K = k)
+
+## Create a vector called accuracy.vector that will store 
+accuracy.vector <- matrix(data = NA, nrow = k, ncol = 1)
+## Create a vector to store optimal tree depth for each CV iteration
+
+opt.depth <- matrix(data = NA, nrow = k, ncol = 1)
+
+## Do this for loop for each fold
+for(i in 1:k){
+  ## Make everything else that isn't fold i the training set 
+  trainFold <-train_selected[folds$subsets[folds$which != i], ] 
+  
+  ## Make fold i the validation set
+  valid <- train_selected[folds$subsets[folds$which == i], ]
+  
+  ## Use the training set to create a model for prediction
+  y<-as.factor(trainFold[,11])
+  x<-trainFold[,1:10]
+  
+  y_valid<-as.factor(valid[,11])
+  x_valid<-valid[,1:10]
+  
+  errors<-matrix(data=NA,nrow=15,ncol=3)
+  
+  for(dep in 1:15){
+    errors[dep,1]<-dep
+    fit<-rpart(y~.,x,control=rpart.control(minsplit=0,minbucket=0,cp=-1,maxcompete=0,
+                                           xval=0,maxdepth=dep,)) 
+    
+    errors[dep,2]<-sum(y!=predict(fit,x,type="class"))/length(y)
+    errors[dep,3]<-sum(y_valid!=predict(fit,x_valid,
+                                       type="class"))/length(y_valid)
+    
+  }
+  ## What is the min value in the accuracy sequence
+  min.value <- min(errors[,3])
+  
+  ## Find the depth values that maximaze the accuracy sequence
+  optimal.depth.values <- c()
+  for(dep in 1:length(errors[,3])) {
+    if(errors[dep, 3] == min.value) {
+      optimal.depth.values <- c(optimal.depth.values, errors[dep, 1])
+    }
+  }
+  
+  ## If there is only one value in the list, then set maxdepth equal to that value
+  ## If there is more than one value in the list, then set the maxdepth equal to the 
+  ## middle value of the list that minimizes the error on the validation set 
+  if(length(optimal.depth.values == 1)) {
+    maxdepth <- optimal.depth.values[1]
+  } 
+  else {
+    if((length(optimal.depth.values) %% 2) == 0) {
+      maxdepth <- optimal.depth.values[length(optimal.depth.values)/2]
+    } 
+    else {
+      maxdepth <- optimal.depth.values[ceiling(length(optimal.depth.values))]
+    }
+  }
+  ## Store the accuracy when fold i is used as the validation set into the ith index of the vector
+  opt.depth[i] = maxdepth
+  accuracy.vector[i] = 1-errors[maxdepth, 3]
+}
 ```
