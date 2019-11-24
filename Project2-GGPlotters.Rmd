@@ -16,6 +16,9 @@ library(gmodels)
 library(tidyverse)
 library(cvTools)
 library(caret)
+library(lubridate)
+
+#install.packages("lubridate")
 
 test <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_test_set.csv")
 train <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_train_set.csv")
@@ -23,19 +26,100 @@ train <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/
 
 ```{r}
 summary(train)
-filtered_train <- train %>% filter(YEAR.BUILT!=0)
 ```
 
 ```{r}
-train_selected <- select(train, 3, 4, 5, 6, 18, 19, 22)
-test_selected <- select(test, 3, 4, 5, 6, 18, 19)
-train_selected <- filter(train_selected, train_selected$YEAR.BUILT!=0)
+train_edit <- train
+test_edit <- test
+#converting GSF to characters to turn into numeric
+train_edit$GROSS.SQUARE.FEET <- as.character(train_edit$GROSS.SQUARE.FEET)
+#turning GSF into numeric and taking out commas so no NA's are introduced
+train_edit$GROSS.SQUARE.FEET <- as.numeric(gsub(",","",train_edit$GROSS.SQUARE.FEET))
+#doing the same for the training set
+test_edit$GROSS.SQUARE.FEET <- as.character(test_edit$GROSS.SQUARE.FEET)
+test_edit$GROSS.SQUARE.FEET <-as.numeric(gsub(",","",test_edit$GROSS.SQUARE.FEET))        
+#taking out missing values
+train_edit1 <- filter(train_edit, GROSS.SQUARE.FEET != 0)
+train_edit2 <-train_edit1
+#mutating based on a range of values
+#i looked at histograms and density curves to see what ranges make sense
+#more granular for lower values and then get more general
+train_edit2 <- train_edit2 %>% mutate(GROSS.SQUARE.FEET = ifelse(GROSS.SQUARE.FEET < 600, "<600", 
+                                                          ifelse(GROSS.SQUARE.FEET < 1000, "600-1000",
+                                                          ifelse(GROSS.SQUARE.FEET < 1500, "1000-1500",
+                                                          ifelse(GROSS.SQUARE.FEET < 2000, "1500-2000",
+                                                          ifelse(GROSS.SQUARE.FEET < 2500, "2000-2500",
+                                                          ifelse(GROSS.SQUARE.FEET < 3000, "2500-3000",
+                                                          ifelse(GROSS.SQUARE.FEET < 4000, "3000-4000",
+                                                          ifelse(GROSS.SQUARE.FEET < 5000, "4000-5000",
+                                                          ifelse(GROSS.SQUARE.FEET < 10000, "5000-10000",
+                                                          ifelse(GROSS.SQUARE.FEET < 20000, "10000-20000",
+                                                          ifelse(GROSS.SQUARE.FEET < 30000, "20000-30000",
+                                                          ">30000"))))))))))))
+
+#turning it into a categorical variable
+train_edit2$GROSS.SQUARE.FEET <- as.factor(train_edit2$GROSS.SQUARE.FEET)
+#doing the same for the test set
+test_edit2 <- test_edit %>% mutate(GROSS.SQUARE.FEET = ifelse(GROSS.SQUARE.FEET < 600, "<600", 
+                                                        ifelse(GROSS.SQUARE.FEET < 1000, "600-1000",
+                                                        ifelse(GROSS.SQUARE.FEET < 1500, "1000-1500",
+                                                        ifelse(GROSS.SQUARE.FEET < 2000, "1500-2000",
+                                                        ifelse(GROSS.SQUARE.FEET < 2500, "2000-2500",
+                                                        ifelse(GROSS.SQUARE.FEET < 3000, "2500-3000",
+                                                        ifelse(GROSS.SQUARE.FEET < 4000, "3000-4000",
+                                                        ifelse(GROSS.SQUARE.FEET < 5000, "4000-5000",
+                                                        ifelse(GROSS.SQUARE.FEET < 10000, "5000-10000",
+                                                        ifelse(GROSS.SQUARE.FEET < 20000, "10000-20000",
+                                                        ifelse(GROSS.SQUARE.FEET < 30000, "20000-30000",
+                                                        ">30000"))))))))))))
+
+test_edit2$GROSS.SQUARE.FEET <- as.factor(test_edit2$GROSS.SQUARE.FEET)
+
+train_with_gsf <- train_edit2
+test_with_gsf <- test_edit2
+
+filtered_train <-  train_with_gsf %>% filter(YEAR.BUILT!=0)
+
 ```
 
+```{r}
+train_with_month <- filtered_train %>% mutate("MONTH.BOUGHT"=month(mdy(SALE.DATE)))
+test_with_month <- test_with_gsf %>% mutate("MONTH.BOUGHT"=month(mdy(SALE.DATE)))
+
+train_with_year <- train_with_month %>% mutate("YEAR.BOUGHT"=year(mdy(SALE.DATE)))
+test_with_year <- test_with_month %>% mutate("YEAR.BOUGHT"=year(mdy(SALE.DATE)))
+
+train_with_season <- train_with_year %>% mutate("SEASON" = ifelse(MONTH.BOUGHT %in% c(12,1,2), "Winter",
+                                                           ifelse(MONTH.BOUGHT %in% c(3,4,5), "Spring",
+                                                           ifelse(MONTH.BOUGHT %in% c(6,7,8), "Summer",
+                                                           ifelse(MONTH.BOUGHT %in% c(9,10,11), "Fall",
+                                                           "No Season")))))
+
+test_with_season <- test_with_year %>% mutate("SEASON" = ifelse(MONTH.BOUGHT %in% c(12,1,2), "Winter",
+                                                         ifelse(MONTH.BOUGHT %in% c(3,4,5), "Spring",
+                                                         ifelse(MONTH.BOUGHT %in% c(6,7,8), "Summer",
+                                                         ifelse(MONTH.BOUGHT %in% c(9,10,11), "Fall",
+                                                         "No Season")))))
+
+train_with_age <- train_with_season %>% mutate("AGE"=YEAR.BOUGHT - YEAR.BUILT)
+test_with_age <- test_with_season %>% mutate("AGE"=YEAR.BOUGHT - YEAR.BUILT)
+
+```
+
+```{r}
+cat_vector <- c("NEIGHBORHOOD", "BUILDING.CLASS.CATEGORY", "TAX.CLASS.AT.PRESENT", "BLOCK", "TAX.CLASS.AT.TIME.OF.SALE", "ZIP.CODE", "GROSS.SQUARE.FEET", "SEASON", "AGE", "LOT", "MONTH.BOUGHT")
+train_selected <- select(train_with_age,cat_vector, "high.end")
+test_selected <- select(test_with_age,cat_vector)
+```
+
+
+```{r}
+
+```
 
 ```{r}
 ## Create k folds 
-k=6
+k=10
 folds <- cvFolds(nrow(train_selected), K = k)
 
 ## Create a vector called accuracy.vector that will store 
@@ -53,11 +137,11 @@ for(i in 1:k){
   valid <- train_selected[folds$subsets[folds$which == i], ]
   
   ## Use the training set to create a model for prediction
-  y<-as.factor(trainFold[,7])
-  x<-trainFold[,1:6]
+  y<-as.factor(trainFold[,ncol(trainFold)])
+  x<-trainFold[,1:(ncol(trainFold)-1)]
   
-  y_valid<-as.factor(valid[,7])
-  x_valid<-valid[,1:6]
+  y_valid<-as.factor(valid[,ncol(valid)])
+  x_valid<-valid[,1:(ncol(valid)-1)]
   
   errors<-matrix(data=NA,nrow=15,ncol=3)
   
@@ -104,13 +188,13 @@ for(i in 1:k){
 
 
 ```{r}
-y<-as.factor(train_selected[,7])
-x<-train_selected[,1:6]
+y<-as.factor(train_selected[,ncol(train_selected)])
+x<-train_selected[,1:(ncol(train_selected) - 1)]
 
-x_valid<-test_selected[,1:6]
+x_valid<-test_selected[,1:(ncol(test_selected))]
   
 fit<-rpart(y~.,x,control=rpart.control(minsplit=0,minbucket=0,cp=-1,maxcompete=0,
-                                           xval=0,maxdepth=6,)) 
+                                           xval=0,maxdepth=14,)) 
 
 predictions <- as.data.frame(predict(fit,x_valid,type="class"))
 rbind(predictions, c("ID, high.end"))
