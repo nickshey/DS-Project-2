@@ -1,0 +1,135 @@
+---
+title: "Project2-GGPlotters"
+author: "The GGPlotters - Chirag Kulkarni, Lidia Solorzano, Wendy Huang, Nojan Sheybani"
+date: "11/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages(C50)
+library(rpart)
+library(C50)
+library(gmodels)
+library(tidyverse)
+library(dbplyr)
+library(cvTools)
+library(caret)
+
+test <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_test_set.csv")
+train <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_train_set.csv")
+setwd("~/Desktop/DS/DS-Project-2")
+test <- read.csv("sales_manhattan_test_set.csv")
+train <- read.csv("sales_manhattan_train_set.csv")
+train$EASE.MENT <- NULL  # Drop the feature EASE.MENT because random forest cannot handle NAs
+filtered_train <- train
+```
+
+Data Preparation
+```{r}
+filtered_train$BOROUGH <- as.factor(filtered_train$BOROUGH)
+# Code BOROUGH as a categorical variable
+
+neighborhood_count <- filtered_train %>% group_by(NEIGHBORHOOD) %>% summarize(count = n()) %>% arrange(desc(count))
+# Make sure that NEIGHBORHOOD has less than 53 categories
+
+building_class_count <- filtered_train %>% group_by(BUILDING.CLASS.CATEGORY) %>% summarize(count = n()) %>% arrange(desc(count))
+# Make sure that BUILDING.CLASS.CATEGORY has less than 53 categories
+
+tax_present_count <- filtered_train %>% group_by(TAX.CLASS.AT.PRESENT) %>% summarize(count = n()) %>% arrange(desc(count))
+# Make sure that TAX.CLASS.AT.PRESENT has less than 53 categories
+
+filtered_train$BLOCK <- as.factor(filtered_train$BLOCK)
+block_count <- filtered_train %>% group_by(BLOCK) %>% summarize(count = n()) %>% arrange(desc(count))
+top_block <- as.matrix(block_count[1:52,1])
+filtered_train$BLOCK <- ifelse(filtered_train$BLOCK %in% top_block,filtered_train$BLOCK,"Other")
+filtered_train$BLOCK <- as.factor(filtered_train$BLOCK)
+# Code other values in BLOCK that cannot reach to Top52 as "Other"
+
+filtered_train$LOT <- as.factor(filtered_train$LOT)
+lot_count <- filtered_train %>% group_by(LOT) %>% summarize(count = n()) %>% arrange(desc(count))
+top_lot <- as.matrix(lot_count[1:52,1])
+filtered_train$LOT <- ifelse(filtered_train$LOT %in% top_lot,filtered_train$LOT,"Other")
+filtered_train$LOT <- as.factor(filtered_train$LOT)
+# Code other values in LOT that cannot reach to Top52 as "Other"
+
+building_present_count <- filtered_train %>% group_by(BUILDING.CLASS.AT.PRESENT) %>% summarize(count = n()) %>% arrange(desc(count))
+top_building_present <- as.matrix(building_present_count[1:52,1])
+filtered_train$BUILDING.CLASS.AT.PRESENT <- ifelse(filtered_train$BUILDING.CLASS.AT.PRESENT %in% top_building_present,filtered_train$BUILDING.CLASS.AT.PRESENT,"Other")
+filtered_train$BUILDING.CLASS.AT.PRESENT <- as.factor(filtered_train$BUILDING.CLASS.AT.PRESENT)
+# Code other values in BUILDING.CLASS.AT.PRESENT that cannot reach to Top52 as "Other"
+
+address_count <- filtered_train %>% group_by(ADDRESS) %>% summarize(count = n()) %>% arrange(desc(count))
+top_address <- as.matrix(address_count[1:52,1])
+filtered_train$ADDRESS <- ifelse(filtered_train$ADDRESS %in% top_address,filtered_train$ADDRESS,"Other")
+filtered_train$ADDRESS <- as.factor(filtered_train$ADDRESS)
+# Code other values in ADDRESS that cannot reach to Top52 as "Other"
+
+
+filtered_train$APARTMENT.NUMBER <- ifelse(filtered_train$APARTMENT.NUMBER == "","0000",filtered_train$APARTMENT.NUMBER)  # Code missing values "" as "000"
+filtered_train$APARTMENT.NUMBER <- as.factor(filtered_train$APARTMENT.NUMBER)
+apartment_number_count <- filtered_train %>% group_by(APARTMENT.NUMBER) %>% summarize(count = n()) %>% arrange(desc(count))
+top_apartment_number <- as.matrix(apartment_number_count[1:52,1])
+filtered_train$APARTMENT.NUMBER <- ifelse(filtered_train$APARTMENT.NUMBER %in% top_apartment_number,filtered_train$APARTMENT.NUMBER,"Other")
+filtered_train$APARTMENT.NUMBER <- as.factor(filtered_train$APARTMENT.NUMBER)
+# Code other values in APARTMENT.NUMBER that cannot reach to Top52 as "Other"
+
+
+filtered_train$ZIP.CODE <- as.factor(filtered_train$ZIP.CODE)
+sum(filtered_train$ZIP.CODE == "0")
+zipcode_count <-filtered_train %>% group_by(ZIP.CODE) %>% summarize(count = n()) %>% arrange(desc(count))
+# Make sure that ZIP.CODE has less than 53 categories
+
+filtered_train$LAND.SQUARE.FEET <- as.numeric(filtered_train$LAND.SQUARE.FEET)
+# Code LAND.SQUARE.FEET as a numerical variable
+filtered_train$GROSS.SQUARE.FEET <- as.numeric(filtered_train$GROSS.SQUARE.FEET)
+# Code GROSS.SQUARE.FEET as a numerical variable
+
+filtered_train$YEAR.BUILT <- as.factor(filtered_train$YEAR.BUILT)
+yearbuilt_count <-filtered_train %>% group_by(YEAR.BUILT) %>% summarize(count = n()) %>% arrange(desc(count))
+top_yearbuilt <- as.matrix(yearbuilt_count[1:52,1])
+filtered_train$YEAR.BUILT <- ifelse(filtered_train$YEAR.BUILT %in% top_yearbuilt,filtered_train$YEAR.BUILT,"Other")
+filtered_train$YEAR.BUILT <- as.factor(filtered_train$YEAR.BUILT)
+# Code other values in YEAR.BUILT that cannot reach to Top52 as "Other"
+
+filtered_train$TAX.CLASS.AT.TIME.OF.SALE <- as.factor(filtered_train$TAX.CLASS.AT.TIME.OF.SALE)
+tax_sale_count <-filtered_train %>% group_by(TAX.CLASS.AT.TIME.OF.SALE) %>% summarize(count = n()) %>% arrange(desc(count))
+# Make sure that TAX.CLASS.AT.TIME.OF.SALE has less than 53 categories
+
+building_sale_count <-filtered_train %>% group_by(BUILDING.CLASS.AT.TIME.OF.SALE) %>% summarize(count = n()) %>% arrange(desc(count))
+top_building_sale <- as.matrix(building_sale_count[1:52,1])
+filtered_train$BUILDING.CLASS.AT.TIME.OF.SALE <- ifelse(filtered_train$BUILDING.CLASS.AT.TIME.OF.SALE %in% top_building_sale,filtered_train$BUILDING.CLASS.AT.TIME.OF.SALE,"Other")
+filtered_train$BUILDING.CLASS.AT.TIME.OF.SALE <- as.factor(filtered_train$BUILDING.CLASS.AT.TIME.OF.SALE)
+# Code other values in BUILDING.CLASS.AT.TIME.OF.SALE that cannot reach to Top52 as "Other"
+
+saledate_count <-filtered_train %>% group_by(SALE.DATE) %>% summarize(count = n()) %>% arrange(desc(count))
+top_saledate <- as.matrix(saledate_count[1:52,1])
+filtered_train$SALE.DATE <- ifelse(filtered_train$SALE.DATE %in% top_saledate,filtered_train$SALE.DATE ,"Other")
+filtered_train$SALE.DATE <- as.factor(filtered_train$SALE.DATE)
+# Code other values in SALE.DATE that cannot reach to Top52 as "Other"
+
+summary(filtered_train)
+```
+
+```{r}
+train_selected <- filtered_train[,1:20]    # Prepare the training set
+train_selected[21] <- filtered_train[,21]
+train_selected$V21 <- as.factor(train_selected$V21)
+summary(train_selected)
+```
+
+Random Forest 
+```{r}
+install.packages("randomForest")
+library(randomForest)
+
+myrf <- randomForest(train_selected[,-21],train_selected$V21, 
+                     sampsize = round(0.6*length(train_selected$V21)), 
+                                      ntree = 500, mtry = sqrt(20), importance = TRUE)  
+myrf
+varImp((myrf))
+varImpPlot(myrf, type=2)   # Plot the mean decrease in Gini
+```
