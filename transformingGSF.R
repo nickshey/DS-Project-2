@@ -1,5 +1,5 @@
-test <- read.csv("~/Desktop/ggplotters/DS-Project-2/sales_manhattan_test_set.csv")
-train <- read.csv("~/Desktop/ggplotters/DS-Project-2/sales_manhattan_train_set.csv")
+test <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_test_set.csv")
+train <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_train_set.csv")
 train_edit <- train
 test_edit <- test
 #converting GSF to characters to turn into numeric

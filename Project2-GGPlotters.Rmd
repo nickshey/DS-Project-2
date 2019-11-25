@@ -107,19 +107,35 @@ test_with_age <- test_with_season %>% mutate("AGE"=YEAR.BOUGHT - YEAR.BUILT)
 ```
 
 ```{r}
-cat_vector <- c("NEIGHBORHOOD", "BUILDING.CLASS.CATEGORY", "TAX.CLASS.AT.PRESENT", "BLOCK", "TAX.CLASS.AT.TIME.OF.SALE", "ZIP.CODE", "GROSS.SQUARE.FEET", "SEASON", "AGE", "LOT", "MONTH.BOUGHT")
+cat_vector <- c("NEIGHBORHOOD", "BUILDING.CLASS.CATEGORY", "TAX.CLASS.AT.PRESENT", "BLOCK", "TAX.CLASS.AT.TIME.OF.SALE", "ZIP.CODE", "GROSS.SQUARE.FEET", "SEASON", "LOT", "MONTH.BOUGHT","AGE")
 train_selected <- select(train_with_age,cat_vector, "high.end")
 test_selected <- select(test_with_age,cat_vector)
 ```
 
 
 ```{r}
+set.seed(12345)
+ind <- createDataPartition(train_selected$high.end, p= 1, list = FALSE)
 
+# split the data frames
+bc_train <- train_selected[ind, ]
+bc_test  <- train_selected[-ind, ]
+
+bc_train$high.end <- as.factor(bc_train$high.end)
+## Now let's give boosting a try, using the "adabag" package in R.
+adaboost <- boosting(high.end ~ ., data=bc_train, boos = FALSE, mfinal=40)
 ```
 
 ```{r}
+p <- predict(adaboost,test_selected)
+predictions <- as.data.frame(predict(adaboost,test_selected,type="class"))
+write.csv(predictions, "~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/prediction.csv")
+```
+
+
+```{r}
 ## Create k folds 
-k=10
+k=6
 folds <- cvFolds(nrow(train_selected), K = k)
 
 ## Create a vector called accuracy.vector that will store 
