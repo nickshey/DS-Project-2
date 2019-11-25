@@ -218,3 +218,61 @@ write.csv(predictions, "~/Desktop/College/Seventh Semester/Data Science/DS-Proje
 dim(test_selected)
 
 ```
+
+
+```{r}
+train_factor <- train_selected
+                                        
+train_factor$high.end <- as.factor(train_factor$high.end)
+n <- names(train_factor)
+f <- rep(NA, times = 12 )
+for (i in 1:12){
+  feature <- train_factor[,i]
+  num <- n_distinct(feature)
+  if(num <= 53){
+    f[i] <- n[i]
+  }
+}
+f<- f[which(!is.na(f))]
+train2 <- select(train_factor, f)
+
+
+#trying a random forest
+control <- trainControl(method='repeatedcv', 
+                        number=10, 
+                        repeats=0)
+#Metric compare model is Accuracy
+metric <- "Accuracy"
+
+## Let's perform a "grid search" to determine the best value of "mytry."  Be prepared to wait . . .
+set.seed(42)
+#tunegrid <- expand.grid(.mtry = c(1:8) -- we optimized .mtry and found that 8 yielded the best results
+
+tunegrid <- expand.grid(.mtry = c(1:9))
+rf_default <- train(high.end~., data = train2, method = 'rf', metric = metric, tuneGrid = tunegrid, 
+                    trControl = control)
+print(rf_default)
+predictions2 <- as.data.frame(predict(rf_default, x_valid, type = "prob"))
+predictions2
+summary(predictions2)
+
+write.csv(predictions,"~/Desktop/ggplotters/DS-Project-2/predictions.csv")
+```
+
+```{r}
+#optimizing for n-tree, this did not work. R crashed
+modellist <- list()
+for (ntree in c(1000, 1500, 2000, 2500)) {
+  set.seed(123)
+  fit <- train(high.end~., data=train2, method="rf", metric=metric, tuneGrid=tunegrid, trControl=control, ntree=ntree)
+  key <- toString(ntree)
+  modellist[[key]] <- fit
+}
+# compare results
+results <- resamples(modellist)
+summary(results)
+dotplot(results)
+
+
+
+```
