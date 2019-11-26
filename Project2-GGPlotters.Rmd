@@ -263,7 +263,7 @@ dotplot(results)
 ```
 
 The next approach we decided to utilize was bagging. We used a large number of bags due to our large dataset.
-```{r}
+```{r, eval=F, echo=T}
 #install.packages('ipred')
 library(ipred)
 bagging <- bagging(high.end~., data = train_selected, coob = TRUE, nbagg=500)
@@ -271,7 +271,7 @@ bagging
 ```
 
 When we submitted to Kaggle, we saw an increase in accuracy to about 81.3%.
-```{r}
+```{r, eval=F, echo=T}
 x_valid<-test_selected[,1:(ncol(test_selected))] # The test set 
   
 bagging_p <- as.data.frame(predict(bagging,x_valid,type="class"))  
