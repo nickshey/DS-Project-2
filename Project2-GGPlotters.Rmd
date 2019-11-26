@@ -262,6 +262,23 @@ summary(results)
 dotplot(results)
 ```
 
+The next approach we decided to utilize was bagging. We used a large number of bags due to our large dataset.
+```{r}
+#install.packages('ipred')
+library(ipred)
+bagging <- bagging(high.end~., data = train_selected, coob = TRUE, nbagg=500)
+bagging
+```
+
+When we submitted to Kaggle, we saw an increase in accuracy to about 81.3%.
+```{r}
+x_valid<-test_selected[,1:(ncol(test_selected))] # The test set 
+  
+bagging_p <- as.data.frame(predict(bagging,x_valid,type="class"))  
+rbind(bagging_p, c("ID, high.end"))
+write.csv(bagging_p, "prediction.csv")
+dim(test_selected)
+```
 
 Next, we decided to use the Adaboost algorithm to try to improve accuracy. Instead of doing any partitioning like we did in class, we just used the whole training set in the adaboost algorithm. We also used a much higher number of trees, because we had much more data. We use errorevol to track how our accuracy is changing as we change different parameters. 
 ```{r}
