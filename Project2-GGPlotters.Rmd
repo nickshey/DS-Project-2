@@ -9,6 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+First, we must import all of the libraries that we may use and read in our data.
 ```{r}
 library(rpart)
 library(C50)
@@ -17,6 +18,7 @@ library(tidyverse)
 library(cvTools)
 library(caret)
 library(lubridate)
+library(adabag)
 
 #install.packages("lubridate")
 
@@ -24,10 +26,13 @@ test <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/s
 train <- read.csv("~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/sales_manhattan_train_set.csv")
 ```
 
+
+Just as a sanity check, we look at the summary of train to see if we've correctly imported the data. This also allows us to look at the data and start brainstorming which features we can use in our predictive models and which features we can engineer.
 ```{r}
 summary(train)
 ```
 
+We saw that there were 6007 0's in gross square feet, so we decided that we should take these out before moving forward. We figured that gross square feet could play a huge role in the value of a house (whether or not it is "high end"). We realized that a major problem we could hit once training our model with the current values of gross square feet is that we could be introduced a new square footage in the prediction phase. In order to make gross square feet more general, we decided to change the values in the column to ranges, as can be seen below. This ensures that any value that is introduced will fall into some range.
 ```{r}
 train_edit <- train
 test_edit <- test
@@ -77,12 +82,12 @@ test_edit2$GROSS.SQUARE.FEET <- as.factor(test_edit2$GROSS.SQUARE.FEET)
 
 train_with_gsf <- train_edit2
 test_with_gsf <- test_edit2
-
-filtered_train <-  train_with_gsf %>% filter(YEAR.BUILT!=0)
-
 ```
 
+Now that we have re-engineering gross square feet, we can start making some new columns. In order to take out any rows that we would not want to use, we start off with taking out all of the rows that have a 0 in the year built column. Then we start engineering some new features. We start by making month and year bought columns from the sale date column. This provides a more general way to compare the prices of a house based on month and year bought. We then use the newly generated month bought column to create a season column in order to take the season of purchase into account. Finally, we make an age column, which uses the newly generated year bought column and existing year built column to calculate how old the building is at time of purchase. Obviously, property often loses value as it ages and newer properties are more valuable.
 ```{r}
+filtered_train <-  train_with_gsf %>% filter(YEAR.BUILT!=0)
+
 train_with_month <- filtered_train %>% mutate("MONTH.BOUGHT"=month(mdy(SALE.DATE)))
 test_with_month <- test_with_gsf %>% mutate("MONTH.BOUGHT"=month(mdy(SALE.DATE)))
 
@@ -106,34 +111,16 @@ test_with_age <- test_with_season %>% mutate("AGE"=YEAR.BOUGHT - YEAR.BUILT)
 
 ```
 
+After feature engineering, we can start narrowing down the columns we will train our model with. We use columns that we engineered in the model, and the rest of the columns chosen were based on us reading the data dictionary and deciding whether or not that could play a role in the value of a property.
 ```{r}
-cat_vector <- c("NEIGHBORHOOD", "BUILDING.CLASS.CATEGORY", "TAX.CLASS.AT.PRESENT", "BLOCK", "TAX.CLASS.AT.TIME.OF.SALE", "ZIP.CODE", "GROSS.SQUARE.FEET", "SEASON", "LOT", "MONTH.BOUGHT","AGE")
+cat_vector <- c("NEIGHBORHOOD", "BUILDING.CLASS.CATEGORY", "TAX.CLASS.AT.PRESENT", "BLOCK", "TAX.CLASS.AT.TIME.OF.SALE", "ZIP.CODE", "GROSS.SQUARE.FEET", "MONTH.BOUGHT", "LOT","AGE", "SEASON")
 train_selected <- select(train_with_age,cat_vector, "high.end")
 test_selected <- select(test_with_age,cat_vector)
 ```
 
-
-```{r}
-set.seed(12345)
-ind <- createDataPartition(train_selected$high.end, p= 1, list = FALSE)
-
-# split the data frames
-bc_train <- train_selected[ind, ]
-bc_test  <- train_selected[-ind, ]
-
-bc_train$high.end <- as.factor(bc_train$high.end)
-## Now let's give boosting a try, using the "adabag" package in R.
-adaboost <- boosting(high.end ~ ., data=bc_train, boos = FALSE, mfinal=40)
-```
-
-```{r}
-p <- predict(adaboost,test_selected)
-predictions <- as.data.frame(predict(adaboost,test_selected,type="class"))
-write.csv(predictions, "~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/prediction.csv")
-```
-
-
-```{r}
+Having our training and testing sets ready, we can start building and testing a model. Our first approach was using cross-validation with decision trees. In this block, we run the cross validation algorithm to find the optimal depth and the highest accuracy that can be used with our model. After doing so, we can use the optimal depth to build a new model that we test our testing set with to build our submission to the competition.
+```{r, eval=F, echo=T}
+afdsfa
 ## Create k folds 
 k=6
 folds <- cvFolds(nrow(train_selected), K = k)
@@ -202,8 +189,8 @@ for(i in 1:k){
 }
 ```
 
-
-```{r}
+The most frequent optimal depth in our opt.depth vector was 14, so we decided to use that as the input for the maxdepth parameter of rpart.control. After using this algorithm and submitting to Kaggle many times, we were able to achieve a max accuracy of ~80.2, so we decided to pursue other algorithms in order to increase our
+```{r, eval=F, echo=T}
 y<-as.factor(train_selected[,ncol(train_selected)])
 x<-train_selected[,1:(ncol(train_selected) - 1)]
 
@@ -219,8 +206,8 @@ dim(test_selected)
 
 ```
 
-
-```{r}
+In this block, we attempt to use the random forest technique. The random forest program in R runs into errors when there are more than 53 categories in a column, so we first had to get around that. Upon that workaround, we were able to run the random forest algorithm. This took FOREVER and resulted in a lower accuracy than we achieved with the cross-validation technique, so we decided to move on to a different technique.
+```{r, eval=F, echo=T}
 train_factor <- train_selected
                                         
 train_factor$high.end <- as.factor(train_factor$high.end)
@@ -259,7 +246,8 @@ summary(predictions2)
 write.csv(predictions,"~/Desktop/ggplotters/DS-Project-2/predictions.csv")
 ```
 
-```{r}
+In this block, we attempt to optimize the random forest algorithm for n-tree, but it ended up crashing R.
+```{r, eval=F, echo=T}
 #optimizing for n-tree, this did not work. R crashed
 modellist <- list()
 for (ntree in c(1000, 1500, 2000, 2500)) {
@@ -272,7 +260,31 @@ for (ntree in c(1000, 1500, 2000, 2500)) {
 results <- resamples(modellist)
 summary(results)
 dotplot(results)
+```
 
 
+Next, we decided to use the Adaboost algorithm to try to improve accuracy. Instead of doing any partitioning like we did in class, we just used the whole training set in the adaboost algorithm. We also used a much higher number of trees, because we had much more data. We use errorevol to track how our accuracy is changing as we change different parameters. 
+```{r}
+set.seed(12345)
+ind <- createDataPartition(train_selected$high.end, p= 1, list = FALSE)
 
+# split the data frames
+bc_train <- train_selected[ind, ]
+bc_test  <- train_selected[-ind, ]
+
+bc_train$high.end <- as.factor(bc_train$high.end)
+## Now let's give boosting a try, using the "adabag" package in R.
+adaboost <- boosting(high.end ~ ., data=bc_train, boos = FALSE, mfinal=50)
+
+errorevol(adaboost, bc_train)
+#Grid <- expand.grid(maxdepth=c(1,2,3,4,5,6,7),nu=.01,iter=c(50,100,150,200))
+#results_ada = train(high.end~., data=bc_train, method="ada",
+#                    trControl=cv_opts,tuneGrid=Grid)
+```
+
+Now that we've stored our model in the adaboost variable, we can run our testing set through it. After this, we build a Kaggle submission in a csv file. This technique resulted in an accuracy of 82.5.
+```{r}
+p <- predict(adaboost,test_selected)
+predictions <- as.data.frame(p$class)
+write.csv(predictions, "~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/prediction.csv")
 ```
