@@ -677,6 +677,18 @@ for (ntree in c(1000, 1500, 2000, 2500)) {
 results &lt;- resamples(modellist)
 summary(results)
 dotplot(results)</code></pre>
+<p>The next approach we decided to utilize was bagging. We used a large number of bags due to our large dataset.</p>
+<pre class="r"><code>#install.packages('ipred')
+library(ipred)
+bagging &lt;- bagging(high.end~., data = train_selected, coob = TRUE, nbagg=500)
+bagging</code></pre>
+<p>When we submitted to Kaggle, we saw an increase in accuracy to about 81.3%.</p>
+<pre class="r"><code>x_valid&lt;-test_selected[,1:(ncol(test_selected))] # The test set 
+  
+bagging_p &lt;- as.data.frame(predict(bagging,x_valid,type=&quot;class&quot;))  
+rbind(bagging_p, c(&quot;ID, high.end&quot;))
+write.csv(bagging_p, &quot;prediction.csv&quot;)
+dim(test_selected)</code></pre>
 <p>Next, we decided to use the Adaboost algorithm to try to improve accuracy. Instead of doing any partitioning like we did in class, we just used the whole training set in the adaboost algorithm. We also used a much higher number of trees, because we had much more data. We use errorevol to track how our accuracy is changing as we change different parameters.</p>
 <pre class="r"><code>set.seed(12345)
 ind &lt;- createDataPartition(train_selected$high.end, p= 1, list = FALSE)
@@ -689,26 +701,62 @@ bc_train$high.end &lt;- as.factor(bc_train$high.end)
 ## Now let's give boosting a try, using the &quot;adabag&quot; package in R.
 adaboost &lt;- boosting(high.end ~ ., data=bc_train, boos = FALSE, mfinal=50)
 
-errorevol(adaboost, bc_train)</code></pre>
-<pre><code>## $error
-##  [1] 0.2097502 0.2097502 0.1898887 0.1796569 0.1667168 0.1662654 0.1608486
-##  [8] 0.1620524 0.1549804 0.1554318 0.1546795 0.1546795 0.1522720 0.1507674
-## [15] 0.1534758 0.1486608 0.1509178 0.1471562 0.1477580 0.1450497 0.1470057
-## [22] 0.1433945 0.1455011 0.1421908 0.1405357 0.1364731 0.1373759 0.1345170
-## [29] 0.1330123 0.1333133 0.1352693 0.1327114 0.1324105 0.1327114 0.1319591
-## [36] 0.1321095 0.1318086 0.1316581 0.1318086 0.1315077 0.1319591 0.1319591
-## [43] 0.1322600 0.1322600 0.1319591 0.1319591 0.1319591 0.1319591 0.1319591
-## [50] 0.1319591
-## 
-## attr(,&quot;class&quot;)
-## [1] &quot;errorevol&quot;</code></pre>
-<pre class="r"><code>#Grid &lt;- expand.grid(maxdepth=c(1,2,3,4,5,6,7),nu=.01,iter=c(50,100,150,200))
+errorevol(adaboost, bc_train)
+#Grid &lt;- expand.grid(maxdepth=c(1,2,3,4,5,6,7),nu=.01,iter=c(50,100,150,200))
 #results_ada = train(high.end~., data=bc_train, method=&quot;ada&quot;,
 #                    trControl=cv_opts,tuneGrid=Grid)</code></pre>
 <p>Now that we’ve stored our model in the adaboost variable, we can run our testing set through it. After this, we build a Kaggle submission in a csv file. This technique resulted in an accuracy of 82.5.</p>
 <pre class="r"><code>p &lt;- predict(adaboost,test_selected)
 predictions &lt;- as.data.frame(p$class)
 write.csv(predictions, &quot;~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/prediction.csv&quot;)</code></pre>
+<p>Finally, we decided to use bagging again and change the columns we use within the training set. We also decided to change Gross Square Feet back to a numeric and redo a few lines just for continuity and make sure we know what’s going on as we debug</p>
+<pre class="r"><code>train_edit &lt;- train
+test_edit &lt;- test
+#converting GSF to characters to turn into numeric
+train_edit$GROSS.SQUARE.FEET &lt;- as.character(train_edit$GROSS.SQUARE.FEET)
+#turning GSF into numeric and taking out commas so no NA's are introduced
+train_edit$GROSS.SQUARE.FEET &lt;- as.numeric(gsub(&quot;,&quot;,&quot;&quot;,train_edit$GROSS.SQUARE.FEET))
+#doing the same for the training set
+test_edit$GROSS.SQUARE.FEET &lt;- as.character(test_edit$GROSS.SQUARE.FEET)
+test_edit$GROSS.SQUARE.FEET &lt;-as.numeric(gsub(&quot;,&quot;,&quot;&quot;,test_edit$GROSS.SQUARE.FEET))        
+
+train_with_month &lt;- filtered_train %&gt;% mutate(&quot;MONTH.BOUGHT&quot;=month(mdy(SALE.DATE)))
+test_with_month &lt;- test_with_gsf %&gt;% mutate(&quot;MONTH.BOUGHT&quot;=month(mdy(SALE.DATE)))
+train_with_year &lt;- train_with_month %&gt;% mutate(&quot;YEAR.BOUGHT&quot;=year(mdy(SALE.DATE)))
+test_with_year &lt;- test_with_month %&gt;% mutate(&quot;YEAR.BOUGHT&quot;=year(mdy(SALE.DATE)))
+train_with_season &lt;- train_with_year %&gt;% mutate(&quot;SEASON&quot; = ifelse(MONTH.BOUGHT %in% c(12,1,2), &quot;Winter&quot;,
+                                                           ifelse(MONTH.BOUGHT %in% c(3,4,5), &quot;Spring&quot;,
+                                                           ifelse(MONTH.BOUGHT %in% c(6,7,8), &quot;Summer&quot;,
+                                                           ifelse(MONTH.BOUGHT %in% c(9,10,11), &quot;Fall&quot;,
+                                                           &quot;No Season&quot;)))))
+test_with_season &lt;- test_with_year %&gt;% mutate(&quot;SEASON&quot; = ifelse(MONTH.BOUGHT %in% c(12,1,2), &quot;Winter&quot;,
+                                                         ifelse(MONTH.BOUGHT %in% c(3,4,5), &quot;Spring&quot;,
+                                                         ifelse(MONTH.BOUGHT %in% c(6,7,8), &quot;Summer&quot;,
+                                                         ifelse(MONTH.BOUGHT %in% c(9,10,11), &quot;Fall&quot;,
+                                                         &quot;No Season&quot;)))))
+train_with_age &lt;- train_with_season %&gt;% mutate(&quot;AGE&quot;=YEAR.BOUGHT - YEAR.BUILT)
+test_with_age &lt;- test_with_season %&gt;% mutate(&quot;AGE&quot;=YEAR.BOUGHT - YEAR.BUILT)
+
+cat_vector &lt;- c(&quot;NEIGHBORHOOD&quot;, &quot;BUILDING.CLASS.CATEGORY&quot;, &quot;TAX.CLASS.AT.PRESENT&quot;, &quot;BLOCK&quot;, &quot;TAX.CLASS.AT.TIME.OF.SALE&quot;, &quot;ZIP.CODE&quot;, &quot;GROSS.SQUARE.FEET&quot;, &quot;SEASON&quot;, &quot;AGE&quot;, &quot;LOT&quot;, &quot;MONTH.BOUGHT&quot;)
+train_selected &lt;- select(train_with_age,cat_vector, &quot;high.end&quot;)
+train_selected$high.end &lt;- as.factor(train_selected$high.end)
+test_selected &lt;- select(test_with_age,cat_vector)</code></pre>
+<p>We then tried to predict using bagging</p>
+<pre class="r"><code>#install.packages('ipred')
+library(ipred)</code></pre>
+<pre><code>## 
+## Attaching package: 'ipred'</code></pre>
+<pre><code>## The following object is masked from 'package:adabag':
+## 
+##     bagging</code></pre>
+<pre class="r"><code>mybag &lt;- bagging(high.end~., data = train_selected, coob = TRUE, nbagg=500)</code></pre>
+<p>Upon submission to Kaggle, we were able to get 86.4%!!</p>
+<pre class="r"><code>x_valid&lt;-test_selected[,1:(ncol(test_selected))] # The test set 
+  
+bagging_p &lt;- as.data.frame(predict(mybag,x_valid,type=&quot;class&quot;))  
+write.csv(bagging_p, &quot;prediction.csv&quot;)
+dim(test_selected)</code></pre>
+<pre><code>## [1] 3536   11</code></pre>
 
 
 

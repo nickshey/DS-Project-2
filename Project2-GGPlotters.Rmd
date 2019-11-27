@@ -281,7 +281,7 @@ dim(test_selected)
 ```
 
 Next, we decided to use the Adaboost algorithm to try to improve accuracy. Instead of doing any partitioning like we did in class, we just used the whole training set in the adaboost algorithm. We also used a much higher number of trees, because we had much more data. We use errorevol to track how our accuracy is changing as we change different parameters. 
-```{r}
+```{r, eval=F, echo=T}
 set.seed(12345)
 ind <- createDataPartition(train_selected$high.end, p= 1, list = FALSE)
 
@@ -300,8 +300,59 @@ errorevol(adaboost, bc_train)
 ```
 
 Now that we've stored our model in the adaboost variable, we can run our testing set through it. After this, we build a Kaggle submission in a csv file. This technique resulted in an accuracy of 82.5.
-```{r}
+```{r, eval=F, echo=T}
 p <- predict(adaboost,test_selected)
 predictions <- as.data.frame(p$class)
 write.csv(predictions, "~/Desktop/College/Seventh Semester/Data Science/DS-Project-2/prediction.csv")
+```
+
+Finally, we decided to use bagging again and change the columns we use within the training set. We also decided to change Gross Square Feet back to a numeric and redo a few lines just for continuity and make sure we know what's going on as we debug
+```{r}
+train_edit <- train
+test_edit <- test
+#converting GSF to characters to turn into numeric
+train_edit$GROSS.SQUARE.FEET <- as.character(train_edit$GROSS.SQUARE.FEET)
+#turning GSF into numeric and taking out commas so no NA's are introduced
+train_edit$GROSS.SQUARE.FEET <- as.numeric(gsub(",","",train_edit$GROSS.SQUARE.FEET))
+#doing the same for the training set
+test_edit$GROSS.SQUARE.FEET <- as.character(test_edit$GROSS.SQUARE.FEET)
+test_edit$GROSS.SQUARE.FEET <-as.numeric(gsub(",","",test_edit$GROSS.SQUARE.FEET))        
+
+train_with_month <- filtered_train %>% mutate("MONTH.BOUGHT"=month(mdy(SALE.DATE)))
+test_with_month <- test_with_gsf %>% mutate("MONTH.BOUGHT"=month(mdy(SALE.DATE)))
+train_with_year <- train_with_month %>% mutate("YEAR.BOUGHT"=year(mdy(SALE.DATE)))
+test_with_year <- test_with_month %>% mutate("YEAR.BOUGHT"=year(mdy(SALE.DATE)))
+train_with_season <- train_with_year %>% mutate("SEASON" = ifelse(MONTH.BOUGHT %in% c(12,1,2), "Winter",
+                                                           ifelse(MONTH.BOUGHT %in% c(3,4,5), "Spring",
+                                                           ifelse(MONTH.BOUGHT %in% c(6,7,8), "Summer",
+                                                           ifelse(MONTH.BOUGHT %in% c(9,10,11), "Fall",
+                                                           "No Season")))))
+test_with_season <- test_with_year %>% mutate("SEASON" = ifelse(MONTH.BOUGHT %in% c(12,1,2), "Winter",
+                                                         ifelse(MONTH.BOUGHT %in% c(3,4,5), "Spring",
+                                                         ifelse(MONTH.BOUGHT %in% c(6,7,8), "Summer",
+                                                         ifelse(MONTH.BOUGHT %in% c(9,10,11), "Fall",
+                                                         "No Season")))))
+train_with_age <- train_with_season %>% mutate("AGE"=YEAR.BOUGHT - YEAR.BUILT)
+test_with_age <- test_with_season %>% mutate("AGE"=YEAR.BOUGHT - YEAR.BUILT)
+
+cat_vector <- c("NEIGHBORHOOD", "BUILDING.CLASS.CATEGORY", "TAX.CLASS.AT.PRESENT", "BLOCK", "TAX.CLASS.AT.TIME.OF.SALE", "ZIP.CODE", "GROSS.SQUARE.FEET", "SEASON", "AGE", "LOT", "MONTH.BOUGHT")
+train_selected <- select(train_with_age,cat_vector, "high.end")
+train_selected$high.end <- as.factor(train_selected$high.end)
+test_selected <- select(test_with_age,cat_vector)
+```
+
+We then tried to predict using bagging 
+```{r}
+#install.packages('ipred')
+library(ipred)
+mybag <- bagging(high.end~., data = train_selected, coob = TRUE, nbagg=500)
+```
+
+Upon submission to Kaggle, we were able to get 86.4%!!
+```{r}
+x_valid<-test_selected[,1:(ncol(test_selected))] # The test set 
+  
+bagging_p <- as.data.frame(predict(mybag,x_valid,type="class"))  
+write.csv(bagging_p, "prediction.csv")
+dim(test_selected)
 ```
